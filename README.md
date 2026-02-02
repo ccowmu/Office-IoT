@@ -2,7 +2,7 @@
 
 HTTP API server for Computer Club office IoT devices.
 
-Replacement for the old `dot.cs.wmich.edu:8878` server that controls LED lights and the smart door lock.
+Replacement for the old `dot.cs.wmich.edu:8878` server that controls LED lights and doorbot.
 
 ## What It Does
 
