@@ -1,162 +1,93 @@
 # Office-IoT
 
-HTTP API server for Computer Club office IoT devices (LED lights and door lock control).
+HTTP API server for Computer Club office IoT devices.
 
-## Overview
+Replacement for the old `dot.cs.wmich.edu:8878` server that controls LED lights and the smart door lock.
 
-This server provides REST API endpoints to control:
-- **LED Strip Lights** - Color, animations (chase, rainbow, random)
-- **Smart Door Lock** - Remote unlock via Raspberry Pi actuator
+## What It Does
 
-The server maintains state and is polled by:
-- Raspberry Pi "doorbot" (polls every 1 second for unlock commands)
-- Matrix chatbot commands (`$led`, `$letmein`, `$door`)
+- **LED Control**: Set colors and animations via Matrix chatbot (`$led` command)
+- **Door Control**: Unlock office door remotely (`$letmein` command)
+- **State Management**: Maintains device state and auto-resets door unlock after 10 seconds
 
-## Architecture
+## API
 
-```
-Matrix Chatbot ──POST──> Office-IoT Server (8878) ◄──GET (poll)── Raspberry Pi Doorbot
-     ($led)                                                          (actuates lock)
-  ($letmein)
-```
+**Port 8878** handles both control and status:
 
-## API Endpoints
+- **POST /**: Control commands from chatbot
+  ```json
+  {"status": {"red": 255, "green": 0, "blue": 0, "type": "color", "letmein": true}}
+  ```
+  Returns: `200 OK`
 
-All endpoints on **Port 8878**:
-
-### POST /
-Control LED lights and door lock.
-
-**Request Body:**
-```json
-{
-  "status": {
-    "red": 127,
-    "green": 255,
-    "blue": 0,
-    "type": "color",
-    "letmein": true
-  }
-}
-```
-
-**Parameters:**
-- `red`, `green`, `blue` (0-255): LED color values
-- `type`: `"color"`, `"chase"`, `"rainbow"`, or `"random"`
-- `letmein` (boolean): Trigger door unlock
-
-**Response:** `200 OK` (empty body, like original)
-
-### GET /
-Query current device status (for doorbot polling).
-
-**Response:**
-```json
-{
-  "letmein": false,
-  "red": 127,
-  "green": 255,
-  "blue": 0,
-  "type": "color",
-  "timestamp": 1738463755
-}
-```
+- **GET /**: Status for doorbot polling
+  ```json
+  {"letmein": false, "red": 255, "green": 0, "blue": 0, "type": "color", ...}
+  ```
 
 ## Quick Start
 
-### Docker (Recommended)
-
 ```bash
-# Clone repository
 git clone https://github.com/ccowmu/Office-IoT.git
 cd Office-IoT
-
-# Configure environment
-cp .env.example .env
-nano .env  # Edit settings
-
-# Start server
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop server
-docker-compose down
+./start.sh
 ```
 
-### Manual Setup
-
-```bash
-# Install dependencies
-pip3 install -r requirements.txt
-
-# Run server
-python3 server.py
-```
-
-Server will listen on:
-- Port 8878 (both POST for control and GET for status polling)
+Server runs on `http://localhost:8878`
 
 ## Configuration
 
-Edit `.env` file:
-
-```env
+Edit `.env`:
+```bash
 HOST=0.0.0.0
 PORT=8878
 UNLOCK_DURATION=10
 DEBUG=false
 ```
 
-## Integration
+## Deployment
 
-### Update Doorbot
-
-Edit doorbot's `doorbot_client.py`:
-
-```python
-SERVER_URL = "http://newyakko.cs.wmich.edu:8878"
+On newyakko.cs.wmich.edu:
+```bash
+cd ~
+git clone https://github.com/ccowmu/Office-IoT.git
+cd Office-IoT
+docker-compose up -d
 ```
 
-### Update Chatbot Commands
-
-Edit ccawmunity commands to point to:
+Update chatbot commands (`led.py`, `letmein.py`):
 ```python
+# Change from:
+requests.post("http://dot.cs.wmich.edu:8878", ...)
+# To:
 requests.post("http://newyakko.cs.wmich.edu:8878", ...)
+```
+
+Update doorbot (`/home/Janus/doorbot/doorbot_client.py`):
+```python
+# Change from:
+SERVER_URL = "http://dot.cs.wmich.edu:8878"
+# To:
+SERVER_URL = "http://newyakko.cs.wmich.edu:8878"
 ```
 
 ## Development
 
 ```bash
-# Run in debug mode
-DEBUG=true python3 server.py
-
-# Run tests
-python3 -m pytest tests/
-
-# Simulate doorbot polling
-curl http://localhost:8877/status
-
-# Trigger door unlock
-curl -X POST http://localhost:8878/control \
-  -H "Content-Type: application/json" \
-  -d '{"status": {"letmein": true}}'
+pip3 install -r requirements.txt
+python3 server.py
 ```
 
-## Security
+Test:
+```bash
+# Trigger unlock
+curl -X POST http://localhost:8878 -H "Content-Type: application/json" \
+  -d '{"status": {"letmein": true}}'
 
-⚠️ **Important:** This server has no authentication by design (legacy compatibility).
-- Should only be accessible on trusted campus network
-- Consider adding API key authentication for production
-- Use firewall rules to restrict access
+# Check status
+curl http://localhost:8878
+```
 
 ## License
 
-GPL-3.0 License - See LICENSE file
-
-## Authors
-
-- Computer Club @ Western Michigan University
-- Original dot.cs.wmich.edu server (legacy)
-- Redesigned 2026 for newyakko.cs.wmich.edu deployment
+GPL-3.0
