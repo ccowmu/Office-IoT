@@ -5,9 +5,9 @@ Office IoT Control Server
 HTTP API server for Computer Club office IoT devices.
 Provides endpoints for LED control and door lock management.
 
-Ports:
-  - 8878: Control endpoint (POST)
-  - 8877: Status endpoint (GET - for doorbot polling)
+Port 8878:
+  - POST: Control commands from chatbot ($led, $letmein)
+  - GET: Status polling from doorbot (checks letmein flag)
 
 Author: Computer Club @ WMU
 License: GPL-3.0
@@ -26,8 +26,7 @@ from flask_cors import CORS
 
 # Configuration
 HOST = os.getenv('HOST', '0.0.0.0')
-CONTROL_PORT = int(os.getenv('CONTROL_PORT', 8878))
-STATUS_PORT = int(os.getenv('STATUS_PORT', 8877))
+PORT = int(os.getenv('PORT', 8878))
 UNLOCK_DURATION = int(os.getenv('UNLOCK_DURATION', 10))
 DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
 
@@ -94,22 +93,17 @@ def unlock_monitor():
         time.sleep(1)
 
 
-# Create Flask apps for both endpoints
-control_app = Flask('control')
-status_app = Flask('status')
-
-# Enable CORS for both apps
-CORS(control_app)
-CORS(status_app)
+# Create Flask app
+app = Flask('office-iot')
+CORS(app)
 
 
-@control_app.route('/control', methods=['POST'])
-@control_app.route('/', methods=['POST'])
+@app.route('/', methods=['POST'])
 def control():
     """
-    Control endpoint for LED and door lock.
+    Control endpoint for LED and door lock - EXACT match for old dot server.
     
-    POST /control
+    POST / (port 8878)
     Body: {
         "status": {
             "red": 0-255,
@@ -119,6 +113,8 @@ def control():
             "letmein": true|false
         }
     }
+    
+    Returns: 200 OK (same as original)
     """
     try:
         data = request.get_json()
@@ -154,11 +150,8 @@ def control():
         if 'letmein' in status_data and status_data['letmein']:
             StateManager.set_unlock(UNLOCK_DURATION)
         
-        return jsonify({
-            'success': True,
-            'message': 'Status updated',
-            'state': StateManager.get_state()
-        })
+        # Return simple 200 OK (like original server)
+        return '', 200
     
     except Exception as e:
         logger.error(f"Error in control endpoint: {e}")
@@ -168,14 +161,13 @@ def control():
         }), 500
 
 
-@status_app.route('/status', methods=['GET'])
-@status_app.route('/', methods=['GET'])
+@app.route('/', methods=['GET'])
 def status():
     """
     Status endpoint for doorbot polling.
     
-    GET /status
-    Returns: Current device state
+    GET / (port 8878)
+    Returns: {"letmein": true/false, ...}
     """
     try:
         return jsonify(StateManager.get_state())
@@ -187,7 +179,7 @@ def status():
         }), 500
 
 
-@control_app.route('/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
     return jsonify({
@@ -196,35 +188,14 @@ def health():
     })
 
 
-def run_control_server():
-    """Run control server on port 8878."""
-    logger.info(f"Starting control server on {HOST}:{CONTROL_PORT}")
-    control_app.run(
-        host=HOST,
-        port=CONTROL_PORT,
-        debug=DEBUG,
-        use_reloader=False
-    )
-
-
-def run_status_server():
-    """Run status server on port 8877."""
-    logger.info(f"Starting status server on {HOST}:{STATUS_PORT}")
-    status_app.run(
-        host=HOST,
-        port=STATUS_PORT,
-        debug=DEBUG,
-        use_reloader=False
-    )
-
-
 def main():
     """Main entry point."""
     logger.info("=" * 60)
     logger.info("Office IoT Control Server")
     logger.info("=" * 60)
-    logger.info(f"Control endpoint: http://{HOST}:{CONTROL_PORT}/control")
-    logger.info(f"Status endpoint: http://{HOST}:{STATUS_PORT}/status")
+    logger.info(f"Listening on: http://{HOST}:{PORT}")
+    logger.info(f"  POST / - Control (chatbot commands)")
+    logger.info(f"  GET  / - Status (doorbot polling)")
     logger.info(f"Unlock duration: {UNLOCK_DURATION} seconds")
     logger.info("=" * 60)
     
@@ -233,12 +204,12 @@ def main():
     monitor_thread.start()
     logger.info("Unlock monitor thread started")
     
-    # Start status server in separate thread
-    status_thread = Thread(target=run_status_server, daemon=True)
-    status_thread.start()
-    
-    # Run control server in main thread
-    run_control_server()
+    # Run server
+    app.run(
+        host=HOST,
+        port=PORT,
+        debug=DEBUG
+    )
 
 
 if __name__ == '__main__':

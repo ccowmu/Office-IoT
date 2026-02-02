@@ -15,15 +15,16 @@ The server maintains state and is polled by:
 ## Architecture
 
 ```
-Matrix Chatbot ──POST──> Office-IoT Server ──GET (poll)──> Raspberry Pi Doorbot
-     ($led)                 (port 8878)                      (actuates lock)
+Matrix Chatbot ──POST──> Office-IoT Server (8878) ◄──GET (poll)── Raspberry Pi Doorbot
+     ($led)                                                          (actuates lock)
   ($letmein)
-   ($door)
 ```
 
 ## API Endpoints
 
-### POST /control (Port 8878)
+All endpoints on **Port 8878**:
+
+### POST /
 Control LED lights and door lock.
 
 **Request Body:**
@@ -44,15 +45,9 @@ Control LED lights and door lock.
 - `type`: `"color"`, `"chase"`, `"rainbow"`, or `"random"`
 - `letmein` (boolean): Trigger door unlock
 
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Status updated"
-}
-```
+**Response:** `200 OK` (empty body, like original)
 
-### GET /status (Port 8877)
+### GET /
 Query current device status (for doorbot polling).
 
 **Response:**
@@ -101,8 +96,7 @@ python3 server.py
 ```
 
 Server will listen on:
-- Port 8878 - Control endpoint
-- Port 8877 - Status endpoint
+- Port 8878 (both POST for control and GET for status polling)
 
 ## Configuration
 
@@ -110,8 +104,7 @@ Edit `.env` file:
 
 ```env
 HOST=0.0.0.0
-CONTROL_PORT=8878
-STATUS_PORT=8877
+PORT=8878
 UNLOCK_DURATION=10
 DEBUG=false
 ```
@@ -123,14 +116,14 @@ DEBUG=false
 Edit doorbot's `doorbot_client.py`:
 
 ```python
-SERVER_URL = "http://newyakko.cs.wmich.edu:8877/status"
+SERVER_URL = "http://newyakko.cs.wmich.edu:8878"
 ```
 
 ### Update Chatbot Commands
 
 Edit ccawmunity commands to point to:
 ```python
-requests.post("http://newyakko.cs.wmich.edu:8878/control", ...)
+requests.post("http://newyakko.cs.wmich.edu:8878", ...)
 ```
 
 ## Development

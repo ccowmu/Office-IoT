@@ -8,11 +8,9 @@ services:
     restart: always
     ports:
       - "8878:8878"
-      - "8877:8877"
     environment:
       - HOST=0.0.0.0
-      - CONTROL_PORT=8878
-      - STATUS_PORT=8877
+      - PORT=8878
       - UNLOCK_DURATION=10
       - DEBUG=false
     networks:
