@@ -25,68 +25,20 @@ Replacement for the old `dot.cs.wmich.edu:8878` server that controls LED lights 
   {"letmein": false, "red": 255, "green": 0, "blue": 0, "type": "color", ...}
   ```
 
-## Quick Start
-
-```bash
-git clone https://github.com/ccowmu/Office-IoT.git
-cd Office-IoT
-./start.sh
-```
-
-Server runs on `http://localhost:8878`
-
-## Configuration
-
-Edit `.env`:
-```bash
-HOST=0.0.0.0
-PORT=8878
-UNLOCK_DURATION=10
-DEBUG=false
-```
-
 ## Deployment
 
-On newyakko.cs.wmich.edu:
 ```bash
-cd ~
 git clone https://github.com/ccowmu/Office-IoT.git
 cd Office-IoT
 docker-compose up -d
 ```
 
-Update chatbot commands (`led.py`, `letmein.py`):
-```python
-# Change from:
-requests.post("http://dot.cs.wmich.edu:8878", ...)
-# To:
-requests.post("http://newyakko.cs.wmich.edu:8878", ...)
-```
-
-Update doorbot (`/home/Janus/doorbot/doorbot_client.py`):
-```python
-# Change from:
-SERVER_URL = "http://dot.cs.wmich.edu:8878"
-# To:
-SERVER_URL = "http://newyakko.cs.wmich.edu:8878"
-```
-
-## Development
-
+View logs:
 ```bash
-pip3 install -r requirements.txt
-python3 server.py
+docker-compose logs -f
 ```
 
-Test:
-```bash
-# Trigger unlock
-curl -X POST http://localhost:8878 -H "Content-Type: application/json" \
-  -d '{"status": {"letmein": true}}'
-
-# Check status
-curl http://localhost:8878
-```
+See [DEPLOYMENT.md](DEPLOYMENT.md) for full instructions.
 
 ## License
 
