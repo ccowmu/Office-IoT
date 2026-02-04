@@ -21,6 +21,9 @@ from datetime import datetime
 from typing import Dict, Any
 from threading import Thread, Lock
 
+import hmac
+from functools import wraps
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -29,6 +32,7 @@ HOST = os.getenv('HOST', '0.0.0.0')
 PORT = int(os.getenv('PORT', 8878))
 UNLOCK_DURATION = int(os.getenv('UNLOCK_DURATION', 10))
 DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
+API_KEY = os.getenv('API_KEY', '')
 
 # Logging setup
 logging.basicConfig(
@@ -98,7 +102,21 @@ app = Flask('office-iot')
 CORS(app)
 
 
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Unauthorized'}), 401
+        token = auth_header[len('Bearer '):]
+        if not hmac.compare_digest(token, API_KEY):
+            return jsonify({'error': 'Unauthorized'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 @app.route('/', methods=['POST'])
+@require_auth
 def control():
     """
     Control endpoint for LED and door lock - EXACT match for old dot server.
@@ -162,6 +180,7 @@ def control():
 
 
 @app.route('/', methods=['GET'])
+@require_auth
 def status():
     """
     Status endpoint for doorbot polling.
@@ -203,7 +222,10 @@ def main():
     monitor_thread = Thread(target=unlock_monitor, daemon=True)
     monitor_thread.start()
     logger.info("Unlock monitor thread started")
-    
+
+    if not API_KEY:
+        logger.warning("WARNING: API_KEY is not set. All requests will be rejected.")
+
     # Run server
     app.run(
         host=HOST,
