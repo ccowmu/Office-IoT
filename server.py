@@ -46,6 +46,7 @@ state_lock = Lock()
 device_state = {
     'letmein': False,
     'sound': '',
+    'sounds': [],
     'red': 0,
     'green': 0,
     'blue': 0,
@@ -200,6 +201,21 @@ def status():
         return jsonify({
             'error': str(e)
         }), 500
+
+
+@app.route('/sounds', methods=['POST'])
+@require_auth
+def update_sounds():
+    """Update available sound list (pushed by doorbot Pi)."""
+    try:
+        data = request.get_json()
+        if not data or 'sounds' not in data:
+            return jsonify({'error': 'Missing "sounds" field'}), 400
+        StateManager.update_state({'sounds': data['sounds']})
+        return '', 200
+    except Exception as e:
+        logger.error(f"Error in sounds endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/health', methods=['GET'])
