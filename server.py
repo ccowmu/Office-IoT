@@ -45,6 +45,7 @@ logger = logging.getLogger('office-iot')
 state_lock = Lock()
 device_state = {
     'letmein': False,
+    'sound': '',
     'red': 0,
     'green': 0,
     'blue': 0,
@@ -72,13 +73,14 @@ class StateManager:
             logger.info(f"State updated: {updates}")
     
     @staticmethod
-    def set_unlock(duration: int) -> None:
+    def set_unlock(duration: int, sound: str = '') -> None:
         """Set door unlock for specified duration."""
         with state_lock:
             device_state['letmein'] = True
+            device_state['sound'] = sound
             device_state['unlock_expires'] = int(time.time()) + duration
             device_state['timestamp'] = int(time.time())
-            logger.info(f"Door unlock set for {duration} seconds")
+            logger.info(f"Door unlock set for {duration} seconds, sound: {sound or 'random'}")
     
     @staticmethod
     def check_unlock_expiry() -> None:
@@ -86,6 +88,7 @@ class StateManager:
         with state_lock:
             if device_state['letmein'] and time.time() >= device_state['unlock_expires']:
                 device_state['letmein'] = False
+                device_state['sound'] = ''
                 device_state['timestamp'] = int(time.time())
                 logger.info("Door unlock expired, reset to locked")
 
@@ -166,7 +169,8 @@ def control():
         
         # Handle door unlock
         if 'letmein' in status_data and status_data['letmein']:
-            StateManager.set_unlock(UNLOCK_DURATION)
+            sound = status_data.get('sound', '')
+            StateManager.set_unlock(UNLOCK_DURATION, sound)
         
         # Return simple 200 OK (like original server)
         return '', 200
