@@ -1,0 +1,56 @@
+= Office-IoT =
+
+The '''Office-IoT''' server is the central hub for the Computer Club's office automation. It handles communication between the Matrix chatbot and the hardware clients (Doorbot and LEDBox).
+
+== Architecture ==
+
+<pre>
+┌──────────────┐      POST /      ┌──────────────────┐      GET /       ┌─────────────┐
+│ Matrix Chat  │ ───────────────▶ │  Office-IoT      │ ◀──────────────  │  Hardware   │
+│ (Chatbot)    │                  │  (yakko:8878)    │ ──────────────▶  │  Clients    │
+└──────────────┘                  └──────────────────┘                  └─────────────┘
+</pre>
+
+The server runs as a '''Flask''' application inside a '''Docker''' container on <code>yakko.cs.wmich.edu</code>.
+
+== API Reference ==
+
+All requests must include the <code>Authorization: Bearer <API_KEY></code> header.
+
+=== POST / (Control) ===
+Used by the Matrix chatbot to update device state.
+
+<syntaxhighlight lang="json">
+{
+  "status": {
+    "red": 0-255,
+    "green": 0-255,
+    "blue": 0-255,
+    "type": "color|chase|rainbow|random",
+    "letmein": true|false
+  }
+}
+</syntaxhighlight>
+
+=== GET / (Status) ===
+Used by hardware clients to poll for the current state.
+
+== Deployment ==
+
+<syntaxhighlight lang="bash">
+# Location on yakko
+cd ~/Office-IoT
+
+# View logs
+sudo docker compose logs -f office-iot-server
+</syntaxhighlight>
+
+== See Also ==
+
+=== Door Bot (Office Lock) ===
+* '''Wiki:''' [[Doorbot]]
+* '''GitHub:''' [https://github.com/ccowmu/doorbot ccowmu/doorbot]
+
+=== LEDBox (Office Lighting) ===
+* '''Wiki:''' [[LEDBox]]
+* '''GitHub:''' [https://github.com/ccowmu/LEDBox ccowmu/LEDBox]
