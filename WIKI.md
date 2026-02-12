@@ -105,9 +105,9 @@ The following variables are required in the `.env` file:
 ## 🔗 See Also
 
 ### Door Bot (Office Lock)
-- **Wiki:** [Door Bot WIKI](https://github.com/ccowmu/doorbot/blob/main/WIKI.md)
-- **GitHub:** [ccowmu/doorbot](https://github.com/ccowmu/doorbot)
+- **Wiki:** [https://cclub.cs.wmich.edu/wiki/Doorbot](https://cclub.cs.wmich.edu/wiki/Doorbot)
+- **GitHub:** [https://github.com/ccowmu/doorbot](https://github.com/ccowmu/doorbot)
 
 ### LEDBox (Office Lighting)
-- **Wiki:** [LEDBox WIKI](https://github.com/ccowmu/LEDBox/blob/main/WIKI.md)
-- **GitHub:** [ccowmu/LEDBox](https://github.com/ccowmu/LEDBox)
+- **Wiki:** [https://cclub.cs.wmich.edu/wiki/LEDBox](https://cclub.cs.wmich.edu/wiki/LEDBox)
+- **GitHub:** [https://github.com/ccowmu/LEDBox](https://github.com/ccowmu/LEDBox)
