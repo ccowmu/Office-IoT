@@ -63,13 +63,56 @@ device_state = {
     'unlock_expires': 0
 }
 
-# Doorbot unlock log (last 100 events)
+# Persistent user log directory
+USER_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Doorbot', 'user-logs')
+USER_LOG_FILE = os.path.join(USER_LOG_DIR, 'unlock_log.json')
+
+# Doorbot unlock log (last 100 events, backed by disk)
 unlock_log_lock = Lock()
 unlock_log = []
 
 # Doorbot health state
 doorbot_health_lock = Lock()
 doorbot_health = {}
+
+
+def _ensure_log_dir():
+    """Create the user-logs directory if it doesn't exist."""
+    os.makedirs(USER_LOG_DIR, exist_ok=True)
+
+
+def _load_log_from_disk():
+    """Load existing unlock log from disk on startup."""
+    global unlock_log
+    try:
+        if os.path.isfile(USER_LOG_FILE):
+            with open(USER_LOG_FILE, 'r') as f:
+                unlock_log = json.load(f)
+            logger.info(f"Loaded {len(unlock_log)} log entries from {USER_LOG_FILE}")
+    except Exception as e:
+        logger.error(f"Failed to load log from disk: {e}")
+        unlock_log = []
+
+
+def _save_log_to_disk():
+    """Write the current unlock log to disk. Must be called with unlock_log_lock held."""
+    try:
+        _ensure_log_dir()
+        with open(USER_LOG_FILE, 'w') as f:
+            json.dump(unlock_log, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save log to disk: {e}")
+
+
+def log_unlock_event(event: Dict[str, Any]) -> None:
+    """Append an unlock event to the log and persist to disk."""
+    with unlock_log_lock:
+        unlock_log.append(event)
+        # Keep last 500 events on disk
+        if len(unlock_log) > 500:
+            del unlock_log[:-500]
+        _save_log_to_disk()
+    logger.info(f"Unlock event logged: {event}")
 
 
 class StateManager:
@@ -193,6 +236,15 @@ def control():
             sender = status_data.get('sender', '')
             StateManager.set_unlock(UNLOCK_DURATION, sound, hold_time, sender)
 
+            # Log the unlock event immediately (persistent to disk)
+            log_unlock_event({
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'epoch': int(time.time()),
+                'sender': sender or 'unknown',
+                'sound': sound or 'random',
+                'source': 'chatbot',
+            })
+
         # Return simple 200 OK (like original server)
         return '', 200
 
@@ -246,12 +298,8 @@ def post_log():
         data = request.get_json()
         if not data:
             return jsonify({'error': 'Missing JSON body'}), 400
-        with unlock_log_lock:
-            unlock_log.append(data)
-            # Keep only the last 100 events
-            if len(unlock_log) > 100:
-                del unlock_log[:-100]
-        logger.info(f"Unlock event logged: {data}")
+        data['source'] = 'doorbot'
+        log_unlock_event(data)
         return '', 200
     except Exception as e:
         logger.error(f"Error in log POST endpoint: {e}")
@@ -314,6 +362,10 @@ def health():
 
 def main():
     """Main entry point."""
+    # Load persistent logs from disk
+    _ensure_log_dir()
+    _load_log_from_disk()
+
     logger.info("=" * 60)
     logger.info("Office IoT Control Server")
     logger.info("=" * 60)
@@ -324,6 +376,7 @@ def main():
     logger.info(f"  GET  /log - Recent unlock history")
     logger.info(f"  POST /health/doorbot - Doorbot heartbeat")
     logger.info(f"  GET  /health/doorbot - Doorbot health status")
+    logger.info(f"  User logs: {USER_LOG_DIR}")
     logger.info(f"Unlock duration: {UNLOCK_DURATION} seconds")
     logger.info("=" * 60)
 
