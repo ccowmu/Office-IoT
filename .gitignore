@@ -258,3 +258,6 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Doorbot user logs (persistent data, not code)
+Doorbot/user-logs/
