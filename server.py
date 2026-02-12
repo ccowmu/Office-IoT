@@ -41,6 +41,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger('office-iot')
 
+# Valid LED animation types
+VALID_LED_TYPES = [
+    'color', 'chase', 'rainbow', 'random',
+    'solid', 'breathe', 'strobe', 'fire', 'meteor', 'scanner',
+    'sparkle', 'police', 'gradient', 'wave', 'candy', 'off'
+]
+
 # Global state storage
 state_lock = Lock()
 device_state = {
@@ -51,20 +58,29 @@ device_state = {
     'green': 0,
     'blue': 0,
     'type': 'color',
+    'hold_time': 0,
     'timestamp': int(time.time()),
     'unlock_expires': 0
 }
 
+# Doorbot unlock log (last 100 events)
+unlock_log_lock = Lock()
+unlock_log = []
+
+# Doorbot health state
+doorbot_health_lock = Lock()
+doorbot_health = {}
+
 
 class StateManager:
     """Manages device state with thread-safe operations."""
-    
+
     @staticmethod
     def get_state() -> Dict[str, Any]:
         """Get current device state."""
         with state_lock:
             return device_state.copy()
-    
+
     @staticmethod
     def update_state(updates: Dict[str, Any]) -> None:
         """Update device state with new values."""
@@ -72,17 +88,18 @@ class StateManager:
             device_state.update(updates)
             device_state['timestamp'] = int(time.time())
             logger.info(f"State updated: {updates}")
-    
+
     @staticmethod
-    def set_unlock(duration: int, sound: str = '') -> None:
+    def set_unlock(duration: int, sound: str = '', hold_time: int = 0, sender: str = '') -> None:
         """Set door unlock for specified duration."""
         with state_lock:
             device_state['letmein'] = True
             device_state['sound'] = sound
+            device_state['hold_time'] = hold_time
             device_state['unlock_expires'] = int(time.time()) + duration
             device_state['timestamp'] = int(time.time())
-            logger.info(f"Door unlock set for {duration} seconds, sound: {sound or 'random'}")
-    
+            logger.info(f"Door unlock set for {duration} seconds, sound: {sound or 'random'}, sender: {sender or 'unknown'}")
+
     @staticmethod
     def check_unlock_expiry() -> None:
         """Check if unlock duration has expired and reset."""
@@ -90,6 +107,7 @@ class StateManager:
             if device_state['letmein'] and time.time() >= device_state['unlock_expires']:
                 device_state['letmein'] = False
                 device_state['sound'] = ''
+                device_state['hold_time'] = 0
                 device_state['timestamp'] = int(time.time())
                 logger.info("Door unlock expired, reset to locked")
 
@@ -124,32 +142,32 @@ def require_auth(f):
 def control():
     """
     Control endpoint for LED and door lock - EXACT match for old dot server.
-    
+
     POST / (port 8878)
     Body: {
         "status": {
             "red": 0-255,
             "green": 0-255,
             "blue": 0-255,
-            "type": "color|chase|rainbow|random",
+            "type": "color|chase|rainbow|random|solid|breathe|strobe|fire|meteor|scanner|sparkle|police|gradient|wave|candy|off",
             "letmein": true|false
         }
     }
-    
+
     Returns: 200 OK (same as original)
     """
     try:
         data = request.get_json()
-        
+
         if not data or 'status' not in data:
             return jsonify({
                 'success': False,
                 'error': 'Missing "status" field'
             }), 400
-        
+
         status_data = data['status']
         updates = {}
-        
+
         # Handle LED color updates
         if 'red' in status_data:
             updates['red'] = max(0, min(255, int(status_data['red'])))
@@ -157,25 +175,27 @@ def control():
             updates['green'] = max(0, min(255, int(status_data['green'])))
         if 'blue' in status_data:
             updates['blue'] = max(0, min(255, int(status_data['blue'])))
-        
+
         # Handle LED type
         if 'type' in status_data:
             led_type = status_data['type']
-            if led_type in ['color', 'chase', 'rainbow', 'random']:
+            if led_type in VALID_LED_TYPES:
                 updates['type'] = led_type
-        
+
         # Update LED state if any LED params provided
         if updates:
             StateManager.update_state(updates)
-        
+
         # Handle door unlock
         if 'letmein' in status_data and status_data['letmein']:
             sound = status_data.get('sound', '')
-            StateManager.set_unlock(UNLOCK_DURATION, sound)
-        
+            hold_time = int(status_data.get('hold_time', 0))
+            sender = status_data.get('sender', '')
+            StateManager.set_unlock(UNLOCK_DURATION, sound, hold_time, sender)
+
         # Return simple 200 OK (like original server)
         return '', 200
-    
+
     except Exception as e:
         logger.error(f"Error in control endpoint: {e}")
         return jsonify({
@@ -189,13 +209,13 @@ def control():
 def status():
     """
     Status endpoint for doorbot polling.
-    
+
     GET / (port 8878)
     Returns: {"letmein": true/false, ...}
     """
     try:
         return jsonify(StateManager.get_state())
-    
+
     except Exception as e:
         logger.error(f"Error in status endpoint: {e}")
         return jsonify({
@@ -218,6 +238,71 @@ def update_sounds():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/log', methods=['POST'])
+@require_auth
+def post_log():
+    """Receive unlock event log from doorbot."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Missing JSON body'}), 400
+        with unlock_log_lock:
+            unlock_log.append(data)
+            # Keep only the last 100 events
+            if len(unlock_log) > 100:
+                del unlock_log[:-100]
+        logger.info(f"Unlock event logged: {data}")
+        return '', 200
+    except Exception as e:
+        logger.error(f"Error in log POST endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/log', methods=['GET'])
+@require_auth
+def get_log():
+    """Return recent unlock history."""
+    try:
+        with unlock_log_lock:
+            return jsonify(list(unlock_log))
+    except Exception as e:
+        logger.error(f"Error in log GET endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/health/doorbot', methods=['GET'])
+@require_auth
+def get_doorbot_health():
+    """Return last heartbeat from doorbot."""
+    try:
+        with doorbot_health_lock:
+            if not doorbot_health:
+                return jsonify({'error': 'No heartbeat received yet'}), 404
+            return jsonify(doorbot_health.copy())
+    except Exception as e:
+        logger.error(f"Error in doorbot health endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/health/doorbot', methods=['POST'])
+@require_auth
+def post_doorbot_health():
+    """Receive heartbeat from doorbot."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Missing JSON body'}), 400
+        with doorbot_health_lock:
+            doorbot_health.clear()
+            doorbot_health.update(data)
+            doorbot_health['server_received'] = int(time.time())
+        logger.debug(f"Doorbot heartbeat: {data}")
+        return '', 200
+    except Exception as e:
+        logger.error(f"Error in doorbot health POST endpoint: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint."""
@@ -235,9 +320,13 @@ def main():
     logger.info(f"Listening on: http://{HOST}:{PORT}")
     logger.info(f"  POST / - Control (chatbot commands)")
     logger.info(f"  GET  / - Status (doorbot polling)")
+    logger.info(f"  POST /log - Doorbot unlock event log")
+    logger.info(f"  GET  /log - Recent unlock history")
+    logger.info(f"  POST /health/doorbot - Doorbot heartbeat")
+    logger.info(f"  GET  /health/doorbot - Doorbot health status")
     logger.info(f"Unlock duration: {UNLOCK_DURATION} seconds")
     logger.info("=" * 60)
-    
+
     # Start unlock monitor thread
     monitor_thread = Thread(target=unlock_monitor, daemon=True)
     monitor_thread.start()
