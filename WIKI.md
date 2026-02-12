@@ -99,3 +99,9 @@ The following variables are required in the `.env` file:
 - **Primary Files:**
   - `server.py`: The main Flask application.
   - `Dockerfile` / `docker-compose.yml`: Container orchestration.
+
+---
+
+## 🔗 See Also
+- [Door Bot](https://github.com/ccowmu/doorbot) — the office door lock system, controlled by this server
+- [LEDBox](https://github.com/ccowmu/LEDBox) — the office LED lighting system, controlled by this server
